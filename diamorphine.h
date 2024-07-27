@@ -1,8 +1,9 @@
-struct linux_dirent {
-        unsigned long   d_ino;
-        unsigned long   d_off;
-        unsigned short  d_reclen;
-        char            d_name[1];
+struct linux_dirent
+{
+	unsigned long d_ino;
+	unsigned long d_off;
+	unsigned short d_reclen;
+	char d_name[1];
 };
 
 #define MAGIC_PREFIX "diamorphine_secret"
@@ -11,7 +12,8 @@ struct linux_dirent {
 
 #define MODULE_NAME "diamorphine"
 
-enum {
+enum
+{
 	SIGINVIS = 31,
 	SIGSUPER = 64,
 	SIGMODINVIS = 63,
@@ -19,13 +21,12 @@ enum {
 
 #ifndef IS_ENABLED
 #define IS_ENABLED(option) \
-(defined(__enabled_ ## option) || defined(__enabled_ ## option ## _MODULE))
+	(defined(__enabled_##option) || defined(__enabled_##option##_MODULE))
 #endif
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,7,0)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 7, 0)
 #define KPROBE_LOOKUP 1
 #include <linux/kprobes.h>
 static struct kprobe kp = {
-	    .symbol_name = "kallsyms_lookup_name"
-};
+	.symbol_name = "kallsyms_lookup_name"};
 #endif

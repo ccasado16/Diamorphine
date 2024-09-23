@@ -428,12 +428,17 @@ static inline void protect_memory(void)
 #endif
 }
 
+/**
+ * function is designed modify the control register CR0 on x86 or x86_64 architectures to disable write protection, allowing the kernel to write to read-only pages.
+ */
 static inline void unprotect_memory(void)
 {
 #if IS_ENABLED(CONFIG_X86) || IS_ENABLED(CONFIG_X86_64)
 #if LINUX_VERSION_CODE > KERNEL_VERSION(4, 16, 0)
+	// This call modifies the CR0 register by clearing the write protection bit (bit 16), effectively disabling write protection.
 	write_cr0_forced(cr0 & ~0x00010000);
 #else
+	// Performs a similar operation but uses a different function to write to the CR0 register. This distinction is necessary because the method to modify the CR0 register may have changed in newer kernel versions.
 	write_cr0(cr0 & ~0x00010000);
 #endif
 #endif

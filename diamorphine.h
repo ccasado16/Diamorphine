@@ -58,6 +58,7 @@ enum
 // This mechanism allows you to dynamically insert probes into the kernel code at runtime, enabling powerful debugging and monitoring capabilities.
 // In this case it allows the module to dynamically locate the address of the kallsyms_lookup_name function at runtime.
 static struct kprobe kp = {
+    // The kallsyms_lookup_name function is used to look up the address of kernel symbols by name
 	.symbol_name = "kallsyms_lookup_name"
 };
 #endif
